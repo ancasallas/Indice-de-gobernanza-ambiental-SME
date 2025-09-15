@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Índice de Gobernanza Ambiental – SME</title>
+
+  <!-- Estilos -->
+  <link rel="stylesheet" href="IGA_2023.css" />
+
+  <!-- SheetJS para leer Excel -->
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Lógica -->
+  <script defer src="IGA_2023.js"></script>
+</head>
+<body>
+
+  <!-- ===== Hero / Encabezado ===== -->
+  <header class="site-hero" id="top">
+    <div class="container hero-inner">
+      <img src="LOGO-UN.png" alt="Universidad Nacional de Colombia" class="logo logo-unal logo-left">
+      <div class="titles">
+        <h1>Índice de Gobernanza Ambiental</h1>
+        <p class="subtitle">Sector Minero – Energético</p>
+      </div>
+      <img src="LOGO-MINENERGÍA-GRIS.png" alt="Ministerio de Minas y Energía" class="logo logo-minminas logo-right">
+    </div>
+  </header>
+
+  <!-- ===== Contenido ===== -->
+  <main class="container">
+    <section class="card">
+
+      <div id="estado-carga" class="muted">Cargando dimensiones desde <strong>Matriz_IGA.xlsx</strong>…</div>
+
+      <div id="botonera" class="grid-botones" aria-live="polite"></div>
+
+      <!-- Panel de definición inline -->
+      <article id="panel-def" class="def-box" aria-labelledby="def-titulo">
+        <header class="def-header">
+          <h3 id="def-titulo">Selecciona una dimensión</h3>
+        </header>
+        <div id="def-contenido" class="def-contenido" aria-live="polite">
+          <p class="muted">Al hacer clic en una dimensión, aquí verás su definición.</p>
+        </div>
+      </article>
+
+      <!-- ===== GRID 2x2 ===== -->
+      <section class="grid-2x2" id="panel-grid">
+        <!-- Fila 1 - Columna Izquierda -->
+        <div class="cell">
+          <h4 class="cell-title">Puntaje por Objetivo de la Gobernanza Ambiental</h4>
+          <!-- (aquí puedes colocar otro contenido cuando lo tengas) -->
+        </div>
+
+        <!-- Fila 1 - Columna Derecha (Gauge 150x150) -->
+        <div class="cell cell-gauge">
+          <div class="gauge-card">
+            <div class="gauge-head">
+              <strong>Índice de Gobernanza Ambiental</strong>
+            </div>
+            <div class="gauge-body">
+              <div id="gauge" class="gauge-wrap" role="img" aria-label="Velocímetro IGA 0 a 1"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fila 2 - Columna Izquierda -->
+        <div class="cell">
+          <h4 class="cell-title">Porcentaje Alcanzado por Dimensión</h4>
+          <div id="dim-bars" class="list-bars" aria-live="polite"></div>
+        </div>
+
+        <!-- Fila 2 - Columna Derecha (AQUÍ van los indicadores filtrados por dimensión) -->
+        <div class="cell">
+          <h4 class="cell-title">Porcentaje Alcanzado por Indicador</h4>
+          <div id="ind-bars" class="list-bars" aria-live="polite"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+</body>
+</html>
+
+
+
+

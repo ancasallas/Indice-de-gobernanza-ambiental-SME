@@ -1,0 +1,152 @@
+/* ===== Base ===== */
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color:#0f172a; background:#f4fbf6; line-height:1.6;
+}
+
+/* ===== Tokens ===== */
+:root{
+  --ink:#0f172a; --muted:#475569; --border:#e2e8f0; --card:#ffffff;
+  --shadow:0 8px 24px rgba(2,6,23,.08); --radius:16px;
+
+  --green-700:#166534;
+  --obj-efectividad:#3f6212;
+  --obj-equidad:#15803d;
+  --obj-receptividad:#ca8a04;
+  --obj-robustez:#0f766e;
+
+  --tinted:#eef7f1;
+}
+
+/* ===== Encabezado ===== */
+.site-hero{ background:#f4fbf6; border-bottom:1px solid var(--border); }
+.hero-inner{ display:flex; align-items:center; justify-content:space-between; padding:18px 0; }
+.titles{ text-align:center; flex:1; }
+.titles h1{ margin:0; font-size:clamp(1.3rem, 1.1rem + 1.2vw, 2rem); color:var(--ink); }
+.subtitle{ margin:2px 0 0; color:var(--muted); }
+
+/* Logos */
+.logo{ width:auto; object-fit:contain; }
+.logo-unal, .logo-minminas{ height:48px; }
+.logo-left{ margin-right:auto; }
+.logo-right{ margin-left:auto; }
+
+/* ===== Layout utilidades ===== */
+.container{ width:min(1140px,92%); margin-inline:auto; }
+.section{ padding:32px 0; }
+.section-tinted{ background:var(--tinted); }
+.section-title{ margin:0 0 14px; font-size:clamp(1.2rem, 1rem + 1vw, 1.9rem); }
+.section-title .highlight{ color:var(--green-700); }
+.intro{ color:var(--muted); margin:6px 0 14px; }
+
+/* ===== Botones ===== */
+.buttons-wrap{ display:flex; flex-wrap:wrap; gap:12px; margin:18px 0 14px; }
+.btn{
+  display:inline-block; text-decoration:none; font-weight:700;
+  padding:.95rem 1.15rem; border-radius:12px; box-shadow:var(--shadow);
+  transition: transform .08s ease, filter .15s ease;
+}
+.btn:hover{ transform:translateY(-2px); filter:brightness(1.03); }
+.btn-primary{ background:var(--green-700); color:#fff; }
+.btn-outline{ background:#ecfdf5; color:#09402a; border:1px solid #ccebdc; }
+
+/* ===== Definition card ===== */
+.definition{
+  background:var(--card); border:1px solid var(--border);
+  border-left:6px solid var(--green-700);
+  border-radius:14px; padding:16px; box-shadow:var(--shadow); color:#1f2937;
+}
+
+/* ===== Enfoque teórico (cards) ===== */
+.cards-grid{ display:grid; gap:16px; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); }
+.card{
+  position:relative; background:var(--card); border:1px solid var(--border);
+  border-radius:var(--radius); padding:18px 16px; box-shadow:var(--shadow);
+}
+.card h3{ margin:4px 0 8px; font-size:1.05rem; }
+.card p{ margin:0; color:#334155; }
+.card-icon{
+  width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:22px; position:absolute; top:-14px; left:-14px; background:#fff; border:2px solid #d1fae5;
+}
+.bg-green{background:#ecfdf5;} .bg-lime{background:#f7fee7;}
+.bg-yellow{background:#fef9c3;} .bg-purple{background:#f5f3ff;}
+.bg-plum{background:#ede9fe;}
+
+/* ======================================================
+   OBJETIVOS Y ELEMENTOS (mismo estilo de la página)
+   ====================================================== */
+.og-layout{
+  display:grid;
+  grid-template-columns: 420px 1fr; /* izquierda fija, derecha flexible */
+  gap:16px;
+  align-items:stretch;
+}
+@media (max-width:960px){ .og-layout{ grid-template-columns:1fr; } }
+
+/* Izquierda */
+.og-left{
+  display:grid;
+  grid-template-columns: 38px 1fr;
+  grid-template-rows: auto auto auto auto auto;
+  gap:8px 10px;
+}
+.og-vertical{
+  grid-row:1/span 5; grid-column:1;
+  writing-mode:vertical-rl; transform:rotate(180deg);
+  background:#e5e7eb; color:#111827; border:1px solid #d1d5db;
+  border-radius:8px; padding:10px 6px; text-align:center; font-weight:800;
+}
+
+/* Reutilizamos obj-box para coherencia visual */
+.og-block{ grid-column:2; }
+.obj-box{
+  border-radius:14px; padding:14px; color:#fff; box-shadow:var(--shadow);
+  border:1px solid transparent;
+}
+.obj-box h3{ margin:0 0 6px; font-size:1.05rem; }
+.obj-box ul{ margin:0; padding-left:18px; line-height:1.45; }
+.obj-efectividad{ background:var(--obj-efectividad); border-color:#a3e635; }
+.obj-equidad    { background:var(--obj-equidad);    border-color:#86efac; }
+.obj-receptividad{ background:var(--obj-receptividad); border-color:#fde68a; color:#1f2937; }
+.obj-robustez   { background:var(--obj-robustez);   border-color:#99f6e4; }
+
+/* Derecha */
+.og-right{
+  position:relative;
+  display:grid; grid-template-columns:repeat(3, 1fr);
+  gap:12px; padding-top:26px; /* espacio para el encabezado flotante */
+}
+@media (max-width:900px){ .og-right{ grid-template-columns:1fr; } }
+
+.og-header{
+  position:absolute; top:0; left:6px; right:6px;
+  background:#4b2e83; color:#fff; text-align:center; font-weight:900;
+  border-radius:10px; padding:6px 10px; border:3px solid #e5e1f7;
+  box-shadow:0 6px 18px rgba(2,6,23,.12);
+}
+
+/* Columnas de elementos reutilizan el estilo el-box blanco */
+.el-box{
+  background:#fff; border:1px solid var(--border);
+  border-radius:14px; padding:14px; box-shadow:var(--shadow);
+}
+.el-box h3{ margin:0 0 6px; color:#111827; font-weight:800; }
+.el-box ul{ margin:0; padding-left:18px; color:#374151; }
+
+/* ===== Footer ===== */
+.site-footer{ background:#0b1320; color:#cbd5e1; margin-top:40px; }
+.footer-inner{ display:flex; align-items:center; justify-content:space-between; padding:14px 0; }
+.to-top{ border:none; border-radius:10px; padding:8px 10px; cursor:pointer; background:#1f2937; color:#fff; }
+
+/* ===== Responsive header ===== */
+@media (max-width:720px){
+  .hero-inner{ flex-direction:column; gap:10px; }
+  .titles{ order:-1; }
+  .logo-unal, .logo-minminas{ height:40px; }
+}
+
+
+
