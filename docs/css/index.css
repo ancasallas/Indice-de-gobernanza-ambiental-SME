@@ -29,7 +29,7 @@ body{
 
 /* Logos */
 .logo{ width:auto; object-fit:contain; }
-.logo-unal, .logo-minminas{ height:48px; }
+.logo-unal, .logo-minminas{ height:60px; }
 .logo-left{ margin-right:auto; }
 .logo-right{ margin-left:auto; }
 

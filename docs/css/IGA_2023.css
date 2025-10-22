@@ -125,5 +125,23 @@ body{
 .bar-fill.mid{  background:var(--bar-mid);  }
 .bar-fill.bad{  background:var(--bar-bad);  }
 
+/* #Comentario Nuevo */
+.ind-link { text-decoration: underline; cursor: pointer; }
+.bar-row.is-link { cursor: pointer; }
+/* #Comentario Nuevo – Quitar estilo de enlace en indicadores */
+.ind-link {
+  color: inherit;              /* usa el color normal del texto */
+  text-decoration: none;       /* quita la línea subrayada */
+  cursor: pointer;             /* mantiene el puntero de mano */
+  font-weight: inherit;
+}
+
+.ind-link:hover {
+  text-decoration: none;       /* sin línea al pasar el mouse */
+  color: inherit;              /* sin cambio de color */
+}
+
+
+
 
 

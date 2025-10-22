@@ -1,5 +1,5 @@
 /* ========= Config ========= */
-const RUTA_XLSX = 'Matriz_IGA.xlsx';
+const RUTA_XLSX = '../xlsx/Matriz_IGA.xlsx';
 const HOJA = 'Resultado';
 const COLUMNA_DIM = 'B'; // Dimensiones (con encabezado)
 
@@ -371,3 +371,141 @@ function renderGauge150(host, value){
 
 /* ========= Init ========= */
 document.addEventListener('DOMContentLoaded', cargarDimensiones);
+
+// ==========================
+// Enlaces a fichas metodológicas (DOCX)
+// ==========================
+// #Comentario Nuevo
+// #Comentario Nuevo — corregir ruta
+const DOCX_DIR = '../dox/';
+
+
+// normaliza texto para usar como llave
+// #Comentario Nuevo
+function normalizarIndicador(s){
+  if(!s) return '';
+  return s.normalize('NFD')
+          .replace(/\p{Diacritic}/gu,'')
+          .replace(/\s+/g,' ')
+          .trim()
+          .toLowerCase();
+}
+
+// Mapa: indicador (normalizado) -> URL exacta del .docx
+
+const DOCX_MAP = new Map([
+  [ normalizarIndicador('Reconocimiento y protección de los derechos ambientales en la política sectorial de derechos humanos'), 
+    DOCX_DIR + '01. Reconocimiento y protección de los derechos ambientales en la política sectorial de derechos humanos.docx' ],
+  [ normalizarIndicador('Contexto favorable para el ejercicio de los derechos ambientales'),
+    DOCX_DIR + '02. Contexto favorable para el ejercicio de los derechos ambientales.docx' ],
+  [ normalizarIndicador('Análisis de impacto regulatorio con dimensión ambiental'),
+    DOCX_DIR + '03. Análisis de impacto regulatorio con dimensión ambiental.docx' ],
+  [ normalizarIndicador('Evaluación ex post de regulaciones'),
+    DOCX_DIR + '04. Evaluación ex post de regulaciones.docx' ],
+  [ normalizarIndicador('Procesos de consulta pública en la producción normativa'),
+    DOCX_DIR + '05. Procesos de consulta pública en la producción normativa.docx' ],
+  [ normalizarIndicador('Puntaje del sector de minas y energía en el índice de Desempeño Institucional'),
+    DOCX_DIR + '6. Puntaje del sector de minas y energía en el índice de Desempeño Institucional.docx' ],
+  [ normalizarIndicador('Coordinación intersectorial'),
+    DOCX_DIR + '07. Coordinación interinstitucional.docx' ],
+  [ normalizarIndicador('Acceso a justicia'),
+    DOCX_DIR + '08. Acceso a justicia.docx' ],
+  [ normalizarIndicador('Participación ciudadana'),
+    DOCX_DIR + '09. Participación Ciudadana.docx' ],
+  [ normalizarIndicador('Interacción de género y enfoque diferencial'),
+    DOCX_DIR + '10. Interacción de género y enfoque diferencial.docx' ],
+  [ normalizarIndicador('Conflictividad socioambiental'),
+    DOCX_DIR + '11. Conflictividad Socioambiental.docx' ],
+  [ normalizarIndicador('Cumplimiento a PQRSD'),
+    DOCX_DIR + '12. Cumplimiento a PQRSD (peticiones, quejas, reclamos, sugerencias y denuncias).docx' ],
+  [ normalizarIndicador('Variación de la demanda hídrica'),
+    DOCX_DIR + '13. Variación de la demanda hídrica.docx' ],
+  [ normalizarIndicador('Variación de la huella hídrica azul'),
+    DOCX_DIR + '14. Variación de la huella hídrica azul.docx' ],
+  [ normalizarIndicador('Variación del área compensada por cada subsector minero energético'),
+    DOCX_DIR + '15. Variación del área compensada para el sector minero energético.docx' ],
+  [ normalizarIndicador('Área de superposición de cada subsector minero energético con determinantes ambientales'),
+    DOCX_DIR + '16. Área de superposición de cada subsector minero energético con determinantes ambientales.docx' ],
+  [ normalizarIndicador('Área de superposición de cada subsector minero energético con áreas prioritarias de conservación'),
+    DOCX_DIR + '17. Área de superposición de cada subsector minero energético con áreas prioritarias de conservación.docx' ],
+  [ normalizarIndicador('Variación en la generación de residuos peligrosos (respel) por unidad producida'),
+    DOCX_DIR + '18. Variación de la generación de residuos peligrosos (respel) por unidad producida.docx' ],
+ 
+]);
+
+// helper para obtener URL a partir del texto del indicador
+// #Comentario Nuevo
+function getDocxUrlFromIndicador(nombreIndicador){
+  const key = normalizarIndicador(nombreIndicador);
+  return DOCX_MAP.get(key) || null;
+}
+ 
+/* ========= Indicadores por dimensión seleccionada ========= */
+function renderIndicadoresPorDimension(nombreDimension){
+  if(!indBarsContainer) return;
+
+  const key = normalizarClave(nombreDimension);
+  const lista = INDICADORES_BY_DIM.get(key) || [];
+
+  if(lista.length === 0){
+    indBarsContainer.innerHTML = `<p class="muted">No hay indicadores para <strong>${nombreDimension}</strong> (E/I en Resultado).</p>`;
+    return;
+  }
+
+  const datos = [...lista].sort((a,b)=> b.val - a.val);
+
+  indBarsContainer.innerHTML = '';
+  datos.forEach(({ ind, val }) => {
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+
+    const title = document.createElement('div');
+    title.className = 'bar-title';
+
+    // #Comentario Nuevo: si existe docx, el título es un enlace clickeable
+    const urlDocx = getDocxUrlFromIndicador(ind);
+    if (urlDocx){
+      const a = document.createElement('a');
+      a.href = urlDocx;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.className = 'ind-link';
+      a.textContent = ind;
+      title.appendChild(a);
+
+      // opcional: que también funcione al clickear toda la fila
+      row.classList.add('is-link'); // puedes estilizarlo en CSS si quieres
+      row.addEventListener('click', (e) => {
+        // evita doble navegación si hizo click directo en el <a>
+        if(e.target.tagName.toLowerCase() !== 'a'){
+          window.open(urlDocx, '_blank', 'noopener');
+        }
+      });
+    }else{
+      title.textContent = ind; // sin enlace si no hay mapeo
+    }
+
+    const right = document.createElement('div');
+    right.className = 'bar-right';
+
+    const valBox = document.createElement('div');
+    valBox.className = 'bar-value';
+    valBox.textContent = fmtPct01(val);
+
+    const track = document.createElement('div');
+    track.className = 'bar-track';
+
+    const fill = document.createElement('div');
+    fill.className = `bar-fill ${colorClase(val)}`;
+    fill.style.width = `${(val*100).toFixed(2)}%`;
+
+    track.appendChild(fill);
+    right.appendChild(valBox);
+    right.appendChild(track);
+
+    row.appendChild(title);
+    row.appendChild(right);
+    indBarsContainer.appendChild(row);
+  });
+}
+
