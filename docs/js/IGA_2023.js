@@ -19,6 +19,10 @@ const indBarsContainer= document.getElementById('ind-bars'); // 2ª fila, derech
 /* ========= Data en memoria ========= */
 const INDICADORES_BY_DIM = new Map();
 
+/* ========= Estado UI ========= */
+let SELECTED_DIM = null;                 // clave normalizada de la dimensión seleccionada
+const DIM_NAME_BY_KEY = new Map();       // key -> nombre original (bonito)
+
 /* ========= Utiles ========= */
 function quitarTildes(s){ return s.normalize('NFD').replace(/\p{Diacritic}/gu,''); }
 function normalizarClave(s){
@@ -119,42 +123,35 @@ async function cargarDimensiones(){
     const wsRes = wb.Sheets[HOJA];
     if(!wsRes) throw new Error(`No existe la hoja '${HOJA}'`);
 
-    // 1) Preparar indicadores por dimensión (B, E, I)
+    // 1) Preparar indicadores por dimensión (B, E, I) y nombres "bonitos"
     prepararIndicadoresDesdeResultado(wsRes);
 
     // 2) Pintar barras por dimensión (promedio por B usando I)
-    renderBarrasDimensionesDesdeResultado(wsRes);
+    renderBarrasDimensionesDesdeResultado();
 
-    // 3) Construir botonera (desde B)
-    const range  = XLSX.utils.decode_range(wsRes['!ref']);
-    const colIdx = COLUMNA_DIM.toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
-    const conjunto = new Set();
-
-    for(let r = range.s.r + 1; r <= range.e.r; r++){
-      const ref  = XLSX.utils.encode_cell({ r, c: colIdx });
-      const cell = wsRes[ref];
-      if(cell && String(cell.v).trim()) conjunto.add(String(cell.v).trim());
-    }
-
-    const lista = Array.from(conjunto);
-    if(lista.length === 0){
+    // 3) Construir botonera desde lo que ya quedó en memoria
+    const claves = Array.from(DIM_NAME_BY_KEY.keys());
+    if(claves.length === 0){
       estadoCarga.textContent = 'No se encontraron dimensiones en la columna B.';
     }else{
-      estadoCarga.textContent = `${lista.length} dimensiones encontradas:`;
+      estadoCarga.textContent = `${claves.length} dimensiones encontradas:`;
       contenedor.innerHTML = '';
-      lista.forEach(nombre => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn-dimension';
-        btn.innerHTML = `<span>${nombre}</span><small>Ver definición</small>`;
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('.btn-dimension.is-active').forEach(b=>b.classList.remove('is-active'));
-          btn.classList.add('is-active');
-          abrirPanel(nombre);
-          renderIndicadoresPorDimension(nombre); // -> 2ª fila / col derecha
+      claves
+        .map(k => DIM_NAME_BY_KEY.get(k))
+        .sort((a,b)=> a.localeCompare(b, 'es'))
+        .forEach(nombre => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn-dimension';
+          btn.innerHTML = `<span>${nombre}</span><small>Ver definición</small>`;
+          btn.addEventListener('click', () => {
+            seleccionarDimension(nombre);
+          });
+          contenedor.appendChild(btn);
         });
-        contenedor.appendChild(btn);
-      });
+
+      // Selección inicial (opcional): primera dimensión alfabética
+      seleccionarDimension(DIM_NAME_BY_KEY.get(claves[0]));
     }
 
     // 4) Gauge con Resultado!G56 (0..1)
@@ -195,62 +192,75 @@ function prepararIndicadoresDesdeResultado(ws){
     val = Math.max(0, Math.min(1, val));
 
     const key = normalizarClave(dim);
+
     if(!INDICADORES_BY_DIM.has(key)) INDICADORES_BY_DIM.set(key, []);
+    if(!DIM_NAME_BY_KEY.has(key)) DIM_NAME_BY_KEY.set(key, dim); // guardar “bonito” la 1ª vez
+
     INDICADORES_BY_DIM.get(key).push({ ind, val });
   }
 }
 
 /* ========= Barras por Dimensión (promedio de I por cada B) ========= */
-function renderBarrasDimensionesDesdeResultado(ws){
-  if(!dimBarsContainer || !ws || !ws['!ref']) return;
+function renderBarrasDimensionesDesdeResultado(){
+  if(!dimBarsContainer) return;
 
   // agrupar por dimensión (usamos los datos ya construidos en INDICADORES_BY_DIM)
   const filas = [];
   for(const [key, arr] of INDICADORES_BY_DIM.entries()){
     if(!arr.length) continue;
     const promedio = arr.reduce((a,b)=>a + b.val, 0) / arr.length;
-    // recuperar el nombre "bonito" (primera ocurrencia)
-    const nombreBonito = arr._nombreOriginal || key;
-    filas.push({ dim: nombreBonito, value: promedio });
+    const nombreBonito = DIM_NAME_BY_KEY.get(key) || key;
+    filas.push({ key, dim: nombreBonito, value: promedio });
   }
 
-  // Si no se guardó el nombre bonito, muéstralo como estaba: capitaliza por simpleza
-  const beautify = s => s.replace(/\b\w/g, ch => ch.toUpperCase());
+  // orden: primero la seleccionada (si existe), luego resto por valor desc
+  filas.sort((a,b)=>{
+    if(SELECTED_DIM && (a.key === SELECTED_DIM || b.key === SELECTED_DIM)){
+      return a.key === SELECTED_DIM ? -1 : 1;
+    }
+    return b.value - a.value;
+  });
 
   // Render
   dimBarsContainer.innerHTML = '';
-  filas
-    .sort((a,b)=> b.value - a.value)
-    .forEach(({dim, value}) => {
-      const row = document.createElement('div');
-      row.className = 'bar-row';
+  filas.forEach(({key, dim, value}) => {
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    if (SELECTED_DIM && key === SELECTED_DIM) row.classList.add('is-selected');
+    row.dataset.dimKey = key;
 
-      const title = document.createElement('div');
-      title.className = 'bar-title';
-      title.textContent = dim || beautify(key);
+    const title = document.createElement('div');
+    title.className = 'bar-title';
+    title.textContent = dim;
 
-      const right = document.createElement('div');
-      right.className = 'bar-right';
+    const right = document.createElement('div');
+    right.className = 'bar-right';
 
-      const val = document.createElement('div');
-      val.className = 'bar-value';
-      val.textContent = fmtPct01(value);
+    const val = document.createElement('div');
+    val.className = 'bar-value';
+    val.textContent = fmtPct01(value);
 
-      const track = document.createElement('div');
-      track.className = 'bar-track';
+    const track = document.createElement('div');
+    track.className = 'bar-track';
 
-      const fill = document.createElement('div');
-      fill.className = `bar-fill ${colorClase(value)}`;
-      fill.style.width = `${(value*100).toFixed(2)}%`;
+    const fill = document.createElement('div');
+    fill.className = `bar-fill ${colorClase(value)}`;
+    fill.style.width = `${(value*100).toFixed(2)}%`;
 
-      track.appendChild(fill);
-      right.appendChild(val);
-      right.appendChild(track);
+    track.appendChild(fill);
+    right.appendChild(val);
+    right.appendChild(track);
 
-      row.appendChild(title);
-      row.appendChild(right);
-      dimBarsContainer.appendChild(row);
+    row.appendChild(title);
+    row.appendChild(right);
+    dimBarsContainer.appendChild(row);
+
+    // clic en la barra también selecciona
+    row.addEventListener('click', () => {
+      const nombre = DIM_NAME_BY_KEY.get(key) || dim;
+      seleccionarDimension(nombre);
     });
+  });
 }
 
 /* ========= Panel inline ========= */
@@ -260,6 +270,128 @@ function abrirPanel(nombreOriginal){
   panelTitulo.textContent = nombreOriginal;
   panelContenido.innerHTML = def || `<p><em>Definición no disponible para: "${nombreOriginal}"</em></p>`;
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ========= Enlaces a fichas metodológicas (DOCX) ========= */
+const DOCX_DIR = '../dox/';
+
+function normalizarIndicador(s){
+  if(!s) return '';
+  return s.normalize('NFD')
+          .replace(/\p{Diacritic}/gu,'')
+          .replace(/\s+/g,' ')
+          .trim()
+          .toLowerCase();
+}
+
+const DOCX_MAP = new Map([
+  [ normalizarIndicador('Reconocimiento y protección de los derechos ambientales en la política sectorial de derechos humanos'), 
+    DOCX_DIR + '01. Reconocimiento y protección de los derechos ambientales en la política sectorial de derechos humanos.docx' ],
+  [ normalizarIndicador('Contexto favorable para el ejercicio de los derechos ambientales'),
+    DOCX_DIR + '02. Contexto favorable para el ejercicio de los derechos ambientales.docx' ],
+  [ normalizarIndicador('Análisis de impacto regulatorio con dimensión ambiental'),
+    DOCX_DIR + '03. Análisis de impacto regulatorio con dimensión ambiental.docx' ],
+  [ normalizarIndicador('Evaluación ex post de regulaciones'),
+    DOCX_DIR + '04. Evaluación ex post de regulaciones.docx' ],
+  [ normalizarIndicador('Procesos de consulta pública en la producción normativa'),
+    DOCX_DIR + '05. Procesos de consulta pública en la producción normativa.docx' ],
+  [ normalizarIndicador('Puntaje del sector de minas y energía en el índice de Desempeño Institucional'),
+    DOCX_DIR + '6. Puntaje del sector de minas y energía en el índice de Desempeño Institucional.docx' ],
+  [ normalizarIndicador('Coordinación intersectorial'),
+    DOCX_DIR + '07. Coordinación interinstitucional.docx' ],
+  [ normalizarIndicador('Acceso a justicia'),
+    DOCX_DIR + '08. Acceso a justicia.docx' ],
+  [ normalizarIndicador('Participación ciudadana'),
+    DOCX_DIR + '09. Participación Ciudadana.docx' ],
+  [ normalizarIndicador('Interacción de género y enfoque diferencial'),
+    DOCX_DIR + '10. Interacción de género y enfoque diferencial.docx' ],
+  [ normalizarIndicador('Conflictividad socioambiental'),
+    DOCX_DIR + '11. Conflictividad Socioambiental.docx' ],
+  [ normalizarIndicador('Cumplimiento a PQRSD'),
+    DOCX_DIR + '12. Cumplimiento a PQRSD (peticiones, quejas, reclamos, sugerencias y denuncias).docx' ],
+  [ normalizarIndicador('Variación de la demanda hídrica'),
+    DOCX_DIR + '13. Variación de la demanda hídrica.docx' ],
+  [ normalizarIndicador('Variación de la huella hídrica azul'),
+    DOCX_DIR + '14. Variación de la huella hídrica azul.docx' ],
+  [ normalizarIndicador('Variación del área compensada por cada subsector minero energético'),
+    DOCX_DIR + '15. Variación del área compensada para el sector minero energético.docx' ],
+  [ normalizarIndicador('Área de superposición de cada subsector minero energético con determinantes ambientales'),
+    DOCX_DIR + '16. Área de superposición de cada subsector minero energético con determinantes ambientales.docx' ],
+  [ normalizarIndicador('Área de superposición de cada subsector minero energético con áreas prioritarias de conservación'),
+    DOCX_DIR + '17. Área de superposición de cada subsector minero energético con áreas prioritarias de conservación.docx' ],
+  [ normalizarIndicador('Variación en la generación de residuos peligrosos (respel) por unidad producida'),
+    DOCX_DIR + '18. Variación de la generación de residuos peligrosos (respel) por unidad producida.docx' ],
+  [ normalizarIndicador('Licenciamiento Ambiental'),
+    DOCX_DIR + '19. Licenciamiento Ambiental.docx' ],
+  [ normalizarIndicador('Procesos sancionatorios ambientales'),
+    DOCX_DIR + '20. Procesos sancionatorios ambientales.docx' ],
+  [ normalizarIndicador('Variación de emisiones de GEI del sector'),
+    DOCX_DIR + '21. Variación de emisiones de GEI del SME.docx' ],
+  [ normalizarIndicador('Tasa de variación de financiamiento climático'),
+    DOCX_DIR + '22. Tasa de Variación del Financiamiento Climático.docx' ],
+  [ normalizarIndicador('Índice de vulnerabilidad climática'),
+    DOCX_DIR + '23. Índice de vulnerabilidad climática.docx' ],
+  [ normalizarIndicador('Índice de Derrames de Hidrocarburos (IDH)'),
+    DOCX_DIR + '24. Índice de Derrames de Hidrocarburos (IDH).docx' ],  
+  [ normalizarIndicador('Índice de Gravedad de Accidentes Mineros (IGAM)'),
+    DOCX_DIR + '25. Índice de Gravedad de Accidentes Mineros (IGAM).docx' ],
+  [ normalizarIndicador('índice de Severidad de Accidentes Eléctricos (ISAE)'),
+    DOCX_DIR + '26. Índice de Severidad de Accidentes Eléctricos (ISAE).docx' ],
+  [ normalizarIndicador('Variación de la intensidad energética por subsector'),
+    DOCX_DIR + '27. Variación de la intensidad energética del sector minero energético.docx' ],
+  [ normalizarIndicador('Variación de la intensidad energética nacional'),
+    DOCX_DIR + '28. Variación de la intensidad energética nacional.docx' ],
+  [ normalizarIndicador('Participación de las FNCER en la matriz energética primaria'),
+    DOCX_DIR + '29. Participación de las FNCER en la matriz energética primaria.' ],
+  [ normalizarIndicador('Participación de las FNCER en la matriz energética eléctrica.'),
+    DOCX_DIR + '30. Participación de las FNCER en la matriz energética eléctrica.docx' ],
+  [ normalizarIndicador('Producción de minerales estratégicos y críticos para la TEJ.'),
+    DOCX_DIR + '31. Producción de Minerales Estratégicos y Críticos para la TEJ.docx' ],
+  [ normalizarIndicador('Pobreza multidimensional en municipios productores de minerales estratégicos'),
+    DOCX_DIR + '32.Pobreza multidimensional en municipios productores de minerales estratégicos TEJ.docx' ],
+  [ normalizarIndicador('Recaudo efectivo de regalías'),
+    DOCX_DIR + '33. Recaudo efectivo de Regalías.docx' ],
+  [ normalizarIndicador('Regalías destinadas al sector ambiente y desarrollo sostenible'),
+    DOCX_DIR + '34. Regalías destinadas al sector Ambiente y Desarrollo Sostenible.docx' ],
+  [ normalizarIndicador('Variación de proyectos del SGR dirigidos al sector ambiente y desarrollo sostenible'),
+    DOCX_DIR + '35. Variación de proyectos del SGR dirigidos al sector ambiente y desarrollo sostenible.docx' ],
+  [ normalizarIndicador('Participación del sector minero energético en el PIB nacional'),
+    DOCX_DIR + '36. Participación del sector Minero Energético en el PIB nacional.docx' ],
+  [ normalizarIndicador('Participación del sector minero energético en las exportaciones del país.'),
+    DOCX_DIR + '37. Participación del sector Minero Energético en las exportaciones del país.docx' ],
+  [ normalizarIndicador('Pobreza multidimensional en municipios productores de hidrocarburos.'),
+    DOCX_DIR + '38. Pobreza multidimensional en municipios productores de hidrocarburos.docx' ],
+  [ normalizarIndicador('Índice de cobertura y equidad territorial en municipios productores'),
+    DOCX_DIR + '39. Cobertura y equidad territorial en municipios productores de hidrocarburos.docx' ],
+  [ normalizarIndicador('Participación de los hidrocarburos en la matriz energética (IPHME)'),
+    DOCX_DIR + '40. Participación de los hidrocarburos en la matriz energética (IPHME).docx' ],
+  [ normalizarIndicador('Variación del stock de hidrocarburos'),
+    DOCX_DIR + '41. Variación del stock de hidrocarburos.docx' ],
+  [ normalizarIndicador('Disponibilidad de reservas de hidrocarburos (R/P)'),
+    DOCX_DIR + '42. Disponibilidad de reservas de hidrocarburos.docx' ],
+  [ normalizarIndicador('Tasa de extracción de hidrocarburos (TEH)'),
+    DOCX_DIR + '43. Tasa de extracción de hidrocarburos (TEH).docx' ],
+  [ normalizarIndicador('Superposición de títulos mineros activos con áreas ambientales excluibles, restrictivas e informativas para la minería'),
+    DOCX_DIR + '44. Superposición de títulos mineros activos con áreas ambientales excluibles.docx' ],
+  [ normalizarIndicador('Superposición de áreas de reserva especial declaradas y solicitadas con áreas ambientales excluibles, restrictivas e informativas para la minería'),
+    DOCX_DIR + '45. Superposición de áreas de reserva especial declaradas y solicitadas con áreas ambientales excluibles.docx' ],
+  [ normalizarIndicador('Procesos de formalización y registro minero'),
+    DOCX_DIR + '46. Procesos de formalización y registro Minero.docx' ],
+  [ normalizarIndicador('Áreas recuperadas por gestión y control a la explotación ilegal de minerales'),
+    DOCX_DIR + '47. Áreas recuperadas por gestión y control por explotación ilegal de minerales.docx' ],
+  [ normalizarIndicador('Variación del Consumo de Energía Eléctrica en el país.'),
+    DOCX_DIR + '48. Variación del Consumo de Energía Eléctrica en el país.docx' ],
+  [ normalizarIndicador('Variación en el nivel de pobreza energética multidimensional nacional.'),
+    DOCX_DIR + '49. Variación en el nivel de pobreza energética multifuncional en el país.docx' ],
+  [ normalizarIndicador('Variación en la cobertura en el acceso al servicio de energía eléctrica en el país.'),
+    DOCX_DIR + '50. Variación en la cobertura en el acceso al servicio de energía eléctrica en el país.docx' ],
+  [ normalizarIndicador('Porcentaje de Informes de Sostenibilidad anuales publicados por empresas generadoras del país.'),
+    DOCX_DIR + '51. Porcentaje de Informes de Sostenibilidad anuales publicados por empresas generadoras del país.docx' ],
+]);
+
+function getDocxUrlFromIndicador(nombreIndicador){
+  const key = normalizarIndicador(nombreIndicador);
+  return DOCX_MAP.get(key) || null;
 }
 
 /* ========= Indicadores por dimensión seleccionada ========= */
@@ -277,13 +409,41 @@ function renderIndicadoresPorDimension(nombreDimension){
   const datos = [...lista].sort((a,b)=> b.val - a.val);
 
   indBarsContainer.innerHTML = '';
+
+  // Título con el nombre de la dimensión seleccionada
+  const header = document.createElement('div');
+  header.className = 'ind-header';
+  header.innerHTML = `<h4 class="ind-dim-title">${nombreDimension}</h4>`;
+  indBarsContainer.appendChild(header);
+
+  // Barras
   datos.forEach(({ ind, val }) => {
     const row = document.createElement('div');
     row.className = 'bar-row';
 
     const title = document.createElement('div');
     title.className = 'bar-title';
-    title.textContent = ind;
+
+    // enlace a DOCX si existe
+    const urlDocx = getDocxUrlFromIndicador(ind);
+    if (urlDocx){
+      const a = document.createElement('a');
+      a.href = urlDocx;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.className = 'ind-link';
+      a.textContent = ind;
+      title.appendChild(a);
+
+      row.classList.add('is-link');
+      row.addEventListener('click', (e) => {
+        if(e.target.tagName.toLowerCase() !== 'a'){
+          window.open(urlDocx, '_blank', 'noopener');
+        }
+      });
+    }else{
+      title.textContent = ind;
+    }
 
     const right = document.createElement('div');
     right.className = 'bar-right';
@@ -307,6 +467,23 @@ function renderIndicadoresPorDimension(nombreDimension){
     row.appendChild(right);
     indBarsContainer.appendChild(row);
   });
+}
+
+/* ========= Selección centralizada ========= */
+function seleccionarDimension(nombreOriginal){
+  const key = normalizarClave(nombreOriginal);
+  SELECTED_DIM = key;
+
+  // activar el botón correspondiente
+  document.querySelectorAll('.btn-dimension').forEach(b=>{
+    const txt = b.querySelector('span')?.textContent?.trim() || '';
+    const k = normalizarClave(txt);
+    b.classList.toggle('is-active', k === key);
+  });
+
+  abrirPanel(DIM_NAME_BY_KEY.get(key) || nombreOriginal);
+  renderIndicadoresPorDimension(DIM_NAME_BY_KEY.get(key) || nombreOriginal); // derecha
+  renderBarrasDimensionesDesdeResultado(); // izquierda (reordena y resalta)
 }
 
 /* ========= Gauge 150x150 ========= */
@@ -371,207 +548,4 @@ function renderGauge150(host, value){
 
 /* ========= Init ========= */
 document.addEventListener('DOMContentLoaded', cargarDimensiones);
-
-// ==========================
-// Enlaces a fichas metodológicas (DOCX)
-// ==========================
-// #Comentario Nuevo
-// #Comentario Nuevo — corregir ruta
-const DOCX_DIR = '../dox/';
-
-
-// normaliza texto para usar como llave
-// #Comentario Nuevo
-function normalizarIndicador(s){
-  if(!s) return '';
-  return s.normalize('NFD')
-          .replace(/\p{Diacritic}/gu,'')
-          .replace(/\s+/g,' ')
-          .trim()
-          .toLowerCase();
-}
-
-// Mapa: indicador (normalizado) -> URL exacta del .docx
-
-const DOCX_MAP = new Map([
-  [ normalizarIndicador('Reconocimiento y protección de los derechos ambientales en la política sectorial de derechos humanos'), 
-    DOCX_DIR + '01. Reconocimiento y protección de los derechos ambientales en la política sectorial de derechos humanos.docx' ],
-  [ normalizarIndicador('Contexto favorable para el ejercicio de los derechos ambientales'),
-    DOCX_DIR + '02. Contexto favorable para el ejercicio de los derechos ambientales.docx' ],
-  [ normalizarIndicador('Análisis de impacto regulatorio con dimensión ambiental'),
-    DOCX_DIR + '03. Análisis de impacto regulatorio con dimensión ambiental.docx' ],
-  [ normalizarIndicador('Evaluación ex post de regulaciones'),
-    DOCX_DIR + '04. Evaluación ex post de regulaciones.docx' ],
-  [ normalizarIndicador('Procesos de consulta pública en la producción normativa'),
-    DOCX_DIR + '05. Procesos de consulta pública en la producción normativa.docx' ],
-  [ normalizarIndicador('Puntaje del sector de minas y energía en el índice de Desempeño Institucional'),
-    DOCX_DIR + '6. Puntaje del sector de minas y energía en el índice de Desempeño Institucional.docx' ],
-  [ normalizarIndicador('Coordinación intersectorial'),
-    DOCX_DIR + '07. Coordinación interinstitucional.docx' ],
-  [ normalizarIndicador('Acceso a justicia'),
-    DOCX_DIR + '08. Acceso a justicia.docx' ],
-  [ normalizarIndicador('Participación ciudadana'),
-    DOCX_DIR + '09. Participación Ciudadana.docx' ],
-  [ normalizarIndicador('Interacción de género y enfoque diferencial'),
-    DOCX_DIR + '10. Interacción de género y enfoque diferencial.docx' ],
-  [ normalizarIndicador('Conflictividad socioambiental'),
-    DOCX_DIR + '11. Conflictividad Socioambiental.docx' ],
-  [ normalizarIndicador('Cumplimiento a PQRSD'),
-    DOCX_DIR + '12. Cumplimiento a PQRSD (peticiones, quejas, reclamos, sugerencias y denuncias).docx' ],
-  [ normalizarIndicador('Variación de la demanda hídrica'),
-    DOCX_DIR + '13. Variación de la demanda hídrica.docx' ],
-  [ normalizarIndicador('Variación de la huella hídrica azul'),
-    DOCX_DIR + '14. Variación de la huella hídrica azul.docx' ],
-  [ normalizarIndicador('Variación del área compensada por cada subsector minero energético'),
-    DOCX_DIR + '15. Variación del área compensada para el sector minero energético.docx' ],
-  [ normalizarIndicador('Área de superposición de cada subsector minero energético con determinantes ambientales'),
-    DOCX_DIR + '16. Área de superposición de cada subsector minero energético con determinantes ambientales.docx' ],
-  [ normalizarIndicador('Área de superposición de cada subsector minero energético con áreas prioritarias de conservación'),
-    DOCX_DIR + '17. Área de superposición de cada subsector minero energético con áreas prioritarias de conservación.docx' ],
-  [ normalizarIndicador('Variación en la generación de residuos peligrosos (respel) por unidad producida'),
-    DOCX_DIR + '18. Variación de la generación de residuos peligrosos (respel) por unidad producida.docx' ],
-  [ normalizarIndicador('Licenciamiento Ambiental'),
-    DOCX_DIR + '19. Licenciamiento Ambiental.docx' ],
-  [ normalizarIndicador('Procesos sancionatorios ambientales'),
-    DOCX_DIR + '20. Procesos sancionatorios ambientales.docx' ],
-  [ normalizarIndicador('Variación de emisiones de GEI del sector'),
-    DOCX_DIR + '21. Variación de emisiones de GEI del SME.docx' ],
-  [ normalizarIndicador('Tasa de variación de financiamiento climático'),
-    DOCX_DIR + '22. Tasa de Variación del Financiamiento Climático.docx' ],
-  [ normalizarIndicador('Índice de vulnerabilidad climática'),
-    DOCX_DIR + '23. Índice de vulnerabilidad climática.docx' ],
-  [ normalizarIndicador('Índice de Derrames de Hidrocarburos (IDH)'),
-    DOCX_DIR + '24. Índice de Derrames de Hidrocarburos (IDH).docx' ],  
-  [ normalizarIndicador('Índice de Gravedad de Accidentes Mineros (IGAM)'),
-    DOCX_DIR + '25. Índice de Gravedad de Accidentes Mineros (IGAM).docx' ],
-  [ normalizarIndicador('índice de Severidad de Accidentes Eléctricos (ISAE)'),
-    DOCX_DIR + '26. Índice de Severidad de Accidentes Eléctricos (ISAE).docx' ],
-  [ normalizarIndicador('Variación de la intensidad energética por subsector'),
-    DOCX_DIR + '27. Variación de la intensidad energética del sector minero energético.docx' ],
-    [ normalizarIndicador('Variación de la intensidad energética nacional'),
-    DOCX_DIR + '28. Variación de la intensidad energética nacional.docx' ],
-  [ normalizarIndicador('Participación de las FNCER en la matriz energética primaria'),
-    DOCX_DIR + '29. Participación de las FNCER en la matriz energética primaria.' ],
-    [ normalizarIndicador('Participación de las FNCER en la matriz energética eléctrica.'),
-    DOCX_DIR + '30. Participación de las FNCER en la matriz energética eléctrica.docx' ],
-    [ normalizarIndicador('Producción de minerales estratégicos y críticos para la TEJ.'),
-    DOCX_DIR + '31. Producción de Minerales Estratégicos y Críticos para la TEJ.docx' ],
-  [ normalizarIndicador('Pobreza multidimensional en municipios productores de minerales estratégicos'),
-    DOCX_DIR + '32.Pobreza multidimensional en municipios productores de minerales estratégicos TEJ.docx' ],
-    [ normalizarIndicador('Recaudo efectivo de regalías'),
-    DOCX_DIR + '33. Recaudo efectivo de Regalías.docx' ],
-     [ normalizarIndicador('Regalías destinadas al sector ambiente y desarrollo sostenible'),
-    DOCX_DIR + '34. Regalías destinadas al sector Ambiente y Desarrollo Sostenible.docx' ],
-  [ normalizarIndicador('Variación de proyectos del SGR dirigidos al sector ambiente y desarrollo sostenible'),
-    DOCX_DIR + '35. Variación de proyectos del SGR dirigidos al sector ambiente y desarrollo sostenible.docx' ],
-     [ normalizarIndicador('Participación del sector minero energético en el PIB nacional'),
-    DOCX_DIR + '36. Participación del sector Minero Energético en el PIB nacional.docx' ],
-     [ normalizarIndicador('Participación del sector minero energético en las exportaciones del país.'),
-    DOCX_DIR + '37. Participación del sector Minero Energético en las exportaciones del país.docx' ],
-  [ normalizarIndicador('Pobreza multidimensional en municipios productores de hidrocarburos.'),
-    DOCX_DIR + '38. Pobreza multidimensional en municipios productores de hidrocarburos.docx' ],
-     [ normalizarIndicador('Índice de cobertura y equidad territorial en municipios productores'),
-    DOCX_DIR + '39. Cobertura y equidad territorial en municipios productores de hidrocarburos.docx' ],
-  [ normalizarIndicador('Participación de los hidrocarburos en la matriz energética (IPHME)'),
-    DOCX_DIR + '40. Participación de los hidrocarburos en la matriz energética (IPHME).docx' ],
-     [ normalizarIndicador('Variación del stock de hidrocarburos'),
-    DOCX_DIR + '41. Variación del stock de hidrocarburos.docx' ],
-  [ normalizarIndicador('Disponibilidad de reservas de hidrocarburos (R/P)'),
-    DOCX_DIR + '42. Disponibilidad de reservas de hidrocarburos.docx' ],
-     [ normalizarIndicador('Tasa de extracción de hidrocarburos (TEH)'),
-    DOCX_DIR + '43. Tasa de extracción de hidrocarburos (TEH).docx' ],
-  [ normalizarIndicador('Superposición de títulos mineros activos con áreas ambientales excluibles, restrictivas e informativas para la minería'),
-    DOCX_DIR + '44. Superposición de títulos mineros activos con áreas ambientales excluibles.docx' ],
-     [ normalizarIndicador('Superposición de áreas de reserva especial declaradas y solicitadas con áreas ambientales excluibles, restrictivas e informativas para la minería'),
-    DOCX_DIR + '45. Superposición de áreas de reserva especial declaradas y solicitadas con áreas ambientales excluibles.docx' ],
-  [ normalizarIndicador('Procesos de formalización y registro minero'),
-    DOCX_DIR + '46. Procesos de formalización y registro Minero.docx' ],
-     [ normalizarIndicador('Áreas recuperadas por gestión y control a la explotación ilegal de minerales'),
-    DOCX_DIR + '47. Áreas recuperadas por gestión y control por explotación ilegal de minerales.docx' ],
-  [ normalizarIndicador('Variación del Consumo de Energía Eléctrica en el país.'),
-    DOCX_DIR + '48. Variación del Consumo de Energía Eléctrica en el país.docx' ],
-     [ normalizarIndicador('Variación en el nivel de pobreza energética multidimensional nacional.'),
-    DOCX_DIR + '49. Variación en el nivel de pobreza energética multifuncional en el país.docx' ],
-    [ normalizarIndicador('Variación en la cobertura en el acceso al servicio de energía eléctrica en el país.'),
-    DOCX_DIR + '50. Variación en la cobertura en el acceso al servicio de energía eléctrica en el país.docx' ],
-  [ normalizarIndicador('Porcentaje de Informes de Sostenibilidad anuales publicados por empresas generadoras del país.'),
-    DOCX_DIR + '51. Porcentaje de Informes de Sostenibilidad anuales publicados por empresas generadoras del país.docx' ],
-
-]);
-
-// helper para obtener URL a partir del texto del indicador
-// #Comentario Nuevo
-function getDocxUrlFromIndicador(nombreIndicador){
-  const key = normalizarIndicador(nombreIndicador);
-  return DOCX_MAP.get(key) || null;
-}
- 
-/* ========= Indicadores por dimensión seleccionada ========= */
-function renderIndicadoresPorDimension(nombreDimension){
-  if(!indBarsContainer) return;
-
-  const key = normalizarClave(nombreDimension);
-  const lista = INDICADORES_BY_DIM.get(key) || [];
-
-  if(lista.length === 0){
-    indBarsContainer.innerHTML = `<p class="muted">No hay indicadores para <strong>${nombreDimension}</strong> (E/I en Resultado).</p>`;
-    return;
-  }
-
-  const datos = [...lista].sort((a,b)=> b.val - a.val);
-
-  indBarsContainer.innerHTML = '';
-  datos.forEach(({ ind, val }) => {
-    const row = document.createElement('div');
-    row.className = 'bar-row';
-
-    const title = document.createElement('div');
-    title.className = 'bar-title';
-
-    // #Comentario Nuevo: si existe docx, el título es un enlace clickeable
-    const urlDocx = getDocxUrlFromIndicador(ind);
-    if (urlDocx){
-      const a = document.createElement('a');
-      a.href = urlDocx;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.className = 'ind-link';
-      a.textContent = ind;
-      title.appendChild(a);
-
-      // opcional: que también funcione al clickear toda la fila
-      row.classList.add('is-link'); // puedes estilizarlo en CSS si quieres
-      row.addEventListener('click', (e) => {
-        // evita doble navegación si hizo click directo en el <a>
-        if(e.target.tagName.toLowerCase() !== 'a'){
-          window.open(urlDocx, '_blank', 'noopener');
-        }
-      });
-    }else{
-      title.textContent = ind; // sin enlace si no hay mapeo
-    }
-
-    const right = document.createElement('div');
-    right.className = 'bar-right';
-
-    const valBox = document.createElement('div');
-    valBox.className = 'bar-value';
-    valBox.textContent = fmtPct01(val);
-
-    const track = document.createElement('div');
-    track.className = 'bar-track';
-
-    const fill = document.createElement('div');
-    fill.className = `bar-fill ${colorClase(val)}`;
-    fill.style.width = `${(val*100).toFixed(2)}%`;
-
-    track.appendChild(fill);
-    right.appendChild(valBox);
-    right.appendChild(track);
-
-    row.appendChild(title);
-    row.appendChild(right);
-    indBarsContainer.appendChild(row);
-  });
-}
 

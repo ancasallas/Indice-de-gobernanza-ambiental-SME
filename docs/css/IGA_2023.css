@@ -140,6 +140,31 @@ body{
   text-decoration: none;       /* sin línea al pasar el mouse */
   color: inherit;              /* sin cambio de color */
 }
+/* botón activo */
+.btn-dimension.is-active {
+  outline: 2px solid var(--accent, #2563eb);
+  background: rgba(37,99,235,.08);
+}
+
+/* barra de la dimensión seleccionada */
+.bar-row.is-selected .bar-title {
+  font-weight: 700;
+}
+.bar-row.is-selected .bar-fill {
+  box-shadow: 0 0 0 2px rgba(37,99,235,.25) inset;
+  transform: scaleY(1.03);
+}
+
+/* header del panel de indicadores */
+.ind-header {
+  margin-bottom: .5rem;
+}
+.ind-dim-title {
+  margin: 0 0 .25rem 0;
+  font-size: clamp(1rem, 1.2vw, 1.125rem);
+  font-weight: 700;
+}
+
 
 
 
