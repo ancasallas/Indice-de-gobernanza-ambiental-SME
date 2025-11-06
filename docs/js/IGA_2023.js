@@ -12,12 +12,14 @@ const panelTitulo   = document.getElementById('def-titulo');
 const panelContenido= document.getElementById('def-contenido');
 
 // Gráficos
-const gaugeContainer  = document.getElementById('gauge');
-const dimBarsContainer= document.getElementById('dim-bars'); // 2ª fila, izquierda
-const indBarsContainer= document.getElementById('ind-bars'); // 2ª fila, derecha
+const gaugeContainer   = document.getElementById('gauge');
+const dimBarsContainer = document.getElementById('dim-bars'); // 2ª fila, izquierda
+const indBarsContainer = document.getElementById('ind-bars'); // 2ª fila, derecha
+const objDonutsContainer = document.getElementById('obj-donuts'); // Fila 1, izquierda (donuts)
 
 /* ========= Data en memoria ========= */
-const INDICADORES_BY_DIM = new Map();
+const INDICADORES_BY_DIM = new Map(); // keyDim -> [{ind, val(0..1)}]
+const OBJETIVOS_BY_DIM   = new Map(); // keyDim -> Map(objetivo -> suma en puntos %)
 
 /* ========= Estado UI ========= */
 let SELECTED_DIM = null;                 // clave normalizada de la dimensión seleccionada
@@ -123,13 +125,13 @@ async function cargarDimensiones(){
     const wsRes = wb.Sheets[HOJA];
     if(!wsRes) throw new Error(`No existe la hoja '${HOJA}'`);
 
-    // 1) Preparar indicadores por dimensión (B, E, I) y nombres "bonitos"
+    // 1) Preparar indicadores (E/I), objetivos (C/I) y nombres por dimensión (B)
     prepararIndicadoresDesdeResultado(wsRes);
 
-    // 2) Pintar barras por dimensión (promedio por B usando I)
+    // 2) Pintar barras por dimensión (promedio usando I)
     renderBarrasDimensionesDesdeResultado();
 
-    // 3) Construir botonera desde lo que ya quedó en memoria
+    // 3) Construir botonera (desde memoria)
     const claves = Array.from(DIM_NAME_BY_KEY.keys());
     if(claves.length === 0){
       estadoCarga.textContent = 'No se encontraron dimensiones en la columna B.';
@@ -150,7 +152,7 @@ async function cargarDimensiones(){
           contenedor.appendChild(btn);
         });
 
-      // Selección inicial (opcional): primera dimensión alfabética
+      // Selección inicial (primera alfabética)
       seleccionarDimension(DIM_NAME_BY_KEY.get(claves[0]));
     }
 
@@ -168,43 +170,66 @@ async function cargarDimensiones(){
   }
 }
 
-/* ========= Mapear B (dim), E (indicador), I (porcentaje) ========= */
+/* ========= Mapear B (dim), C (objetivo), E (indicador), I (porcentaje) ========= */
 function prepararIndicadoresDesdeResultado(ws){
   if(!ws || !ws['!ref']) return;
 
-  const range = XLSX.utils.decode_range(ws['!ref']);
-  const COL_DIM = 1; // B
-  const COL_IND = 4; // E
-  const COL_VAL = 8; // I
+  const range   = XLSX.utils.decode_range(ws['!ref']);
+  const COL_DIM = 1; // B = Dimensión
+  const COL_OBJ = 2; // C = Objetivo por dimensión
+  const COL_IND = 4; // E = Indicador
+  const COL_VAL = 8; // I = Porcentaje alcanzado (0..1 o 0..100)
 
   for(let r = range.s.r + 1; r <= range.e.r; r++){
     const dimCell = ws[XLSX.utils.encode_cell({ r, c: COL_DIM })];
+    const objCell = ws[XLSX.utils.encode_cell({ r, c: COL_OBJ })];
     const indCell = ws[XLSX.utils.encode_cell({ r, c: COL_IND })];
     const valCell = ws[XLSX.utils.encode_cell({ r, c: COL_VAL })];
 
     const dim = dimCell ? String(dimCell.v).trim() : '';
+    const obj = objCell ? String(objCell.v).trim() : '';
     const ind = indCell ? String(indCell.v).trim() : '';
     let   val = valCell ? Number(valCell.v) : NaN;
 
     if(!dim || !ind || !Number.isFinite(val)) continue;
 
+    // normalizar a 0..1
     if(Math.abs(val) > 1.0001) val = val / 100;
     val = Math.max(0, Math.min(1, val));
 
     const key = normalizarClave(dim);
 
+    // Indicadores por dimensión
     if(!INDICADORES_BY_DIM.has(key)) INDICADORES_BY_DIM.set(key, []);
-    if(!DIM_NAME_BY_KEY.has(key)) DIM_NAME_BY_KEY.set(key, dim); // guardar “bonito” la 1ª vez
-
+    if(!DIM_NAME_BY_KEY.has(key))    DIM_NAME_BY_KEY.set(key, dim);
     INDICADORES_BY_DIM.get(key).push({ ind, val });
+
+    // Objetivos por dimensión → acumulamos sum y count para luego hacer promedio
+    if(obj){
+      if(!OBJETIVOS_BY_DIM.has(key)) OBJETIVOS_BY_DIM.set(key, new Map());
+      const m = OBJETIVOS_BY_DIM.get(key);
+
+      const prev = m.get(obj) || { sum:0, count:0 };
+      prev.sum += val * 100;   // acumulamos en puntos %
+      prev.count += 1;
+      m.set(obj, prev);
+    }
+  }
+
+  // Convertimos cada {sum,count} en promedio
+  for(const [key, mapa] of OBJETIVOS_BY_DIM.entries()){
+    for(const [obj, v] of mapa.entries()){
+      const promedio = v.count > 0 ? v.sum / v.count : 0;
+      mapa.set(obj, promedio);
+    }
   }
 }
 
-/* ========= Barras por Dimensión (promedio de I por cada B) ========= */
+
+/* ========= Barras por Dimensión (promedio I por B) ========= */
 function renderBarrasDimensionesDesdeResultado(){
   if(!dimBarsContainer) return;
 
-  // agrupar por dimensión (usamos los datos ya construidos en INDICADORES_BY_DIM)
   const filas = [];
   for(const [key, arr] of INDICADORES_BY_DIM.entries()){
     if(!arr.length) continue;
@@ -213,7 +238,7 @@ function renderBarrasDimensionesDesdeResultado(){
     filas.push({ key, dim: nombreBonito, value: promedio });
   }
 
-  // orden: primero la seleccionada (si existe), luego resto por valor desc
+  // primero la seleccionada; resto por valor desc
   filas.sort((a,b)=>{
     if(SELECTED_DIM && (a.key === SELECTED_DIM || b.key === SELECTED_DIM)){
       return a.key === SELECTED_DIM ? -1 : 1;
@@ -221,7 +246,6 @@ function renderBarrasDimensionesDesdeResultado(){
     return b.value - a.value;
   });
 
-  // Render
   dimBarsContainer.innerHTML = '';
   filas.forEach(({key, dim, value}) => {
     const row = document.createElement('div');
@@ -469,6 +493,90 @@ function renderIndicadoresPorDimension(nombreDimension){
   });
 }
 
+/* ========= Donuts por Objetivo (C/I) ========= */
+function renderObjetivosPorDimension(nombreDimension){
+  if(!objDonutsContainer) return;
+
+  const key = normalizarClave(nombreDimension);
+  const m = OBJETIVOS_BY_DIM.get(key) || new Map();
+
+  if(m.size === 0){
+    objDonutsContainer.innerHTML = `<p class="muted">No hay datos de objetivos para <strong>${nombreDimension}</strong> (C/I en Resultado).</p>`;
+    return;
+  }
+
+  const filas = Array.from(m.entries()).map(([obj, puntos]) => ({
+    obj,
+    puntos: Math.round(puntos) // 0..100 aprox (sumatoria en puntos %)
+  }));
+
+  objDonutsContainer.innerHTML = '';
+  filas.forEach(({ obj, puntos }) => {
+    const card = document.createElement('div');
+    card.className = 'obj-card';
+
+    const svg = renderDonutSimple(puntos); // 0..100
+    const caption = document.createElement('div');
+    caption.className = 'obj-caption';
+    caption.textContent = obj;
+
+    card.appendChild(svg);
+    card.appendChild(caption);
+    objDonutsContainer.appendChild(card);
+  });
+}
+
+function renderDonutSimple(valor){ // 0..100
+  const W=140, H=140, CX=W/2, CY=H/2, R=52, ST=16;
+  const frac = Math.max(0, Math.min(100, valor)) / 100;
+
+  // Colores tipo ejemplo (ajusta a tu paleta)
+  let colorClass = 'donut-blue';
+  if(valor < 45) colorClass = 'donut-yellow';
+  if(valor >= 60) colorClass = 'donut-green';
+  if(valor >= 50 && valor < 60) colorClass = 'donut-purple';
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.classList.add('donut');
+
+  const circleTrack = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  circleTrack.setAttribute('cx', CX);
+  circleTrack.setAttribute('cy', CY);
+  circleTrack.setAttribute('r', R);
+  circleTrack.setAttribute('class','donut-track');
+  circleTrack.setAttribute('fill','none');
+  circleTrack.setAttribute('stroke-width', ST);
+
+  const circleFill = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  circleFill.setAttribute('cx', CX);
+  circleFill.setAttribute('cy', CY);
+  circleFill.setAttribute('r', R);
+  circleFill.setAttribute('class', `donut-fill ${colorClass}`);
+  circleFill.setAttribute('fill','none');
+  circleFill.setAttribute('stroke-width', ST);
+  circleFill.setAttribute('transform', `rotate(-90 ${CX} ${CY})`);
+
+  const len = 2 * Math.PI * R;
+  circleFill.setAttribute('stroke-dasharray', `${(frac*len).toFixed(1)} ${len.toFixed(1)}`);
+  circleFill.setAttribute('stroke-dashoffset', '0');
+  circleFill.setAttribute('stroke-linecap','round');
+
+  const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+  txt.setAttribute('x', CX);
+  txt.setAttribute('y', CY - 4);
+  txt.setAttribute('text-anchor','middle');
+  txt.setAttribute('class','donut-value');
+  txt.textContent = String(Math.round(valor));
+
+  svg.appendChild(circleTrack);
+  svg.appendChild(circleFill);
+  svg.appendChild(txt);
+  return svg;
+}
+
 /* ========= Selección centralizada ========= */
 function seleccionarDimension(nombreOriginal){
   const key = normalizarClave(nombreOriginal);
@@ -481,9 +589,12 @@ function seleccionarDimension(nombreOriginal){
     b.classList.toggle('is-active', k === key);
   });
 
-  abrirPanel(DIM_NAME_BY_KEY.get(key) || nombreOriginal);
-  renderIndicadoresPorDimension(DIM_NAME_BY_KEY.get(key) || nombreOriginal); // derecha
-  renderBarrasDimensionesDesdeResultado(); // izquierda (reordena y resalta)
+  const nombreBonito = DIM_NAME_BY_KEY.get(key) || nombreOriginal;
+
+  abrirPanel(nombreBonito);
+  renderIndicadoresPorDimension(nombreBonito); // derecha
+  renderBarrasDimensionesDesdeResultado();     // izquierda (reordena y resalta)
+  renderObjetivosPorDimension(nombreBonito);   // donuts (fila 1 izq)
 }
 
 /* ========= Gauge 150x150 ========= */

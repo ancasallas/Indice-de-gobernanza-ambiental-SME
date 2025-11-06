@@ -164,6 +164,20 @@ body{
   font-size: clamp(1rem, 1.2vw, 1.125rem);
   font-weight: 700;
 }
+.obj-donuts-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px,1fr));
+  gap:12px;
+}
+.obj-card{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;border-radius:14px;padding:10px 8px;box-shadow:0 1px 6px rgba(0,0,0,.06);}
+.donut-track{stroke:#ddd;opacity:.85;}
+.donut-fill{stroke:#4b8bf7;}
+.donut-blue{stroke:#1da1f2;}
+.donut-yellow{stroke:#f5b301;}
+.donut-green{stroke:#43a047;}
+.donut-purple{stroke:#6a5acd;}
+.donut-value{font-size:24px;font-weight:800;fill:#333;}
+.obj-caption{margin-top:4px;font-size:.95rem;font-weight:600;text-align:center;}
 
 
 
